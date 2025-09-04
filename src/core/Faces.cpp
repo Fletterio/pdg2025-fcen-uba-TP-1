@@ -36,48 +36,104 @@
 
 #include <math.h>
 #include "Faces.hpp"
-  
-Faces::Faces(const int nV, const vector<int>& coordIndex) {
-  // TODO
+#include <algorithm>
+
+// Assuming there's at least one face in the vector and that it's valid (ends in -1)
+Faces::Faces(const int _nV, const vector<int>& _coordIndex)
+{
+    coordIndex = _coordIndex;
+    unsigned int index = 0u;
+    for (auto vertex : coordIndex)
+    {
+        if (vertex >= 0)
+            nVertices++;
+        else
+        {
+            faceStartingIndex.push_back(index);
+        }
+        index++;
+    }
 }
 
-int Faces::getNumberOfVertices() const {
-  // TODO
-  return 0;
+int Faces::getNumberOfVertices() const
+{
+    return nVertices;
 }
 
-int Faces::getNumberOfFaces() const {
-  // TODO
-  return 0;
+int Faces::getNumberOfFaces() const
+{
+    return faceStartingIndex.size();
 }
 
-int Faces::getNumberOfCorners() const {
-  // TODO
-  return 0;
+int Faces::getNumberOfCorners() const
+{
+    return coordIndex.size();
 }
 
-int Faces::getFaceSize(const int iF) const {
-  // TODO
-  return 0;
+// We have indices for where a face begins. The difference between the index where this face begins and the next is
+// exactly the face size + 1 (counting the separating -1). The only exception is the last face, for which we know
+// the ending -1 is at the last index of the coordIndex array.
+int Faces::getFaceSize(const int iF) const
+{
+    if (iF >= int(faceStartingIndex.size()))
+        return 0;
+    unsigned int thisFaceStartingIndex = faceStartingIndex[iF];
+    // In the case of the last face, the next face "would" start 1 position past the last index in coordIndex
+    unsigned int nextFaceStartingIndex = (iF == int(faceStartingIndex.size()) - 1) ? coordIndex.size() : faceStartingIndex[iF + 1];
+    return nextFaceStartingIndex - thisFaceStartingIndex - 1;
 }
 
-int Faces::getFaceFirstCorner(const int iF) const {
-  // TODO
-  return -1;
+int Faces::getFaceFirstCorner(const int iF) const
+{
+    if (iF >= int(faceStartingIndex.size()))
+        return -1;
+    return faceStartingIndex[iF];
 }
 
-int Faces::getFaceVertex(const int iF, const int j) const {
-  // TODO
-  return -1;
+// Assuming j instead of iC means its indexed as a local corner index (0 through face size - 1)
+// Also interpreting "corner index" means index into the array
+int Faces::getFaceVertex(const int iF, const int j) const
+{
+    if (iF >= int(faceStartingIndex.size()) || j >= getFaceSize(iF))
+        return -1;
+    return coordIndex[faceStartingIndex[iF] + j];
 }
 
-int Faces::getCornerFace(const int iC) const {
-  // TODO
-  return -1;
+int Faces::getCornerFace(const int iC) const
+{
+    if (iC >= int(coordIndex.size()) || -1 == coordIndex[iC])
+        return -1;
+    // Since we sorted faces starting indices in ascending order we can binary search the face
+    // It's going to be the face iF such that faceStartingIndex[iF] <= iC < faceStartingIndex[iF + 1]
+    unsigned int left = 0, right = faceStartingIndex.size() - 1;
+    while (right - left > 1)
+    {
+        unsigned int mid = (right + left) / 2;
+        if (iC < int(faceStartingIndex[mid]))
+        {
+            right = mid;
+        }
+        else if (iC > int(faceStartingIndex[mid]))
+        {
+            left = mid;
+        }
+        // early return
+        else
+        {
+            return mid;
+        }
+    }
+    if (iC == int(faceStartingIndex[left]))
+        return left;
+    return right;
 }
 
-int Faces::getNextCorner(const int iC) const {
-  // TODO
-  return -1;
+int Faces::getNextCorner(const int iC) const
+{
+    if (iC >= int(coordIndex.size()) || -1 == coordIndex[iC])
+        return -1;
+    if (coordIndex[iC+1] != -1)
+        return iC + 1;
+    return faceStartingIndex[getCornerFace(iC)];
 }
 
