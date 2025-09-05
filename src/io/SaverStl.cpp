@@ -47,43 +47,47 @@ const char* SaverStl::_ext = "stl";
 
 //////////////////////////////////////////////////////////////////////
 bool SaverStl::save(const char* filename, SceneGraph& wrl) const {
-  bool success = false;
-  if(filename!=(char*)0) {
+    bool success = false;
+    if(filename!=(char*)0) {
 
     // Check these conditions
-
+    bool canSave;
     // 1) the SceneGraph should have a single child
+    canSave = wrl.getNumberOfChildren() == 1;
     // 2) the child should be a Shape node
+    canSave = canSave && wrl[0]->isShape();
     // 3) the geometry of the Shape node should be an IndexedFaceSet node
-
-    // - construct an instance of the Faces class from the IndexedFaceSet
-    // - remember to delete it when you are done with it (if necessary)
-    //   before returning
+    canSave = canSave && reinterpret_cast<Shape*>(wrl[0])->hasGeometryIndexedFaceSet();
+    if (!canSave)
+        return false;
+    IndexedFaceSet* faceSet = reinterpret_cast<IndexedFaceSet*>(reinterpret_cast<Shape*>(wrl[0])->getGeometry());
 
     // 4) the IndexedFaceSet should be a triangle mesh
+    canSave = faceSet->isTriangleMesh();
     // 5) the IndexedFaceSet should have normals per face
+    canSave &= faceSet->getNormalBinding() == IndexedFaceSet::PB_PER_FACE_INDEXED || faceSet->getNormalBinding() == IndexedFaceSet::PB_PER_FACE;
+    if (canSave) {
+        const IndexedFaceSet::Binding bindingType = faceSet->getNormalBinding();
 
-    // if (all the conditions are satisfied) {
+        FILE* fp = fopen(filename,"w");
+        if(	fp!=(FILE*)0) {
 
-    FILE* fp = fopen(filename,"w");
-    if(	fp!=(FILE*)0) {
+          // if set, use ifs->getName()
+          // otherwise use filename,
+          // but first remove directory and extension
 
-      // if set, use ifs->getName()
-      // otherwise use filename,
-      // but first remove directory and extension
+          fprintf(fp,"solid %s\n",filename);
 
-      fprintf(fp,"solid %s\n",filename);
+          // TODO ...
+          // for each face {
+          //   ...
+          // }
 
-      // TODO ...
-      // for each face {
-      //   ...
-      // }
-      
-      fclose(fp);
-      success = true;
+          fclose(fp);
+          success = true;
+        }
+
     }
-
-    // } endif (all the conditions are satisfied)
 
   }
   return success;
