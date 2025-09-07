@@ -43,13 +43,15 @@ Faces::Faces(const int _nV, const vector<int>& _coordIndex)
 {
     coordIndex = _coordIndex;
     unsigned int index = 0u;
+    unsigned int currentFaceStartingIndex = 0u;
     for (auto vertex : coordIndex)
     {
         if (vertex >= 0)
             nVertices++;
         else
         {
-            faceStartingIndex.push_back(index);
+            faceStartingIndex.push_back(currentFaceStartingIndex);
+            currentFaceStartingIndex = index + 1;
         }
         index++;
     }

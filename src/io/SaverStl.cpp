@@ -42,6 +42,7 @@
 #include "wrl/IndexedFaceSet.hpp"
 
 #include "core/Faces.hpp"
+#include <array>
 
 const char* SaverStl::_ext = "stl";
 
@@ -65,27 +66,58 @@ bool SaverStl::save(const char* filename, SceneGraph& wrl) const {
     // 4) the IndexedFaceSet should be a triangle mesh
     canSave = faceSet->isTriangleMesh();
     // 5) the IndexedFaceSet should have normals per face
-    canSave &= faceSet->getNormalBinding() == IndexedFaceSet::PB_PER_FACE_INDEXED || faceSet->getNormalBinding() == IndexedFaceSet::PB_PER_FACE;
+    const IndexedFaceSet::Binding bindingType = faceSet->getNormalBinding();
+    canSave &= bindingType == IndexedFaceSet::PB_PER_FACE_INDEXED || bindingType == IndexedFaceSet::PB_PER_FACE;
     if (canSave) {
-        const IndexedFaceSet::Binding bindingType = faceSet->getNormalBinding();
 
-        FILE* fp = fopen(filename,"w");
-        if(	fp!=(FILE*)0) {
+    FILE* fp = fopen(filename,"w");
+    if(	fp!=(FILE*)0) {
 
-          // if set, use ifs->getName()
-          // otherwise use filename,
-          // but first remove directory and extension
+        // if set, use ifs->getName()
+        // otherwise use filename,
+        // but first remove directory and extension
 
-          fprintf(fp,"solid %s\n",filename);
+        using Normal = std::array<float, 3>;
+        using Vertex = std::array<float, 3>;
 
-          // TODO ...
-          // for each face {
-          //   ...
-          // }
+        const auto& normals = faceSet->getNormal();
+        auto getNormal = [&](const int faceIdx) -> Normal
+        {
+            unsigned int startingIdx;
+            if (bindingType == IndexedFaceSet::PB_PER_FACE_INDEXED)
+                startingIdx = faceSet->getNormalIndex()[faceIdx];
+            else
+                startingIdx = 3 * faceIdx;
 
-          fclose(fp);
-          success = true;
+            return {normals[startingIdx], normals[startingIdx+ 1], normals[startingIdx + 2]};
+        };
+
+        // Create a Faces struct
+        const auto faces = Faces(0, faceSet->getCoordIndex());
+        const auto& vertices = faceSet->getCoord();
+
+        fprintf(fp,"solid %s\n",filename);
+        const unsigned int numFaces = faces.getNumberOfFaces();
+        for (auto faceIdx = 0u; faceIdx < numFaces; faceIdx++)
+        {
+            const Normal normal = getNormal(faceIdx);
+            fprintf(fp, "facet normal %f %f %f\n", normal[0], normal[1], normal[2]);
+            fprintf(fp, "outer loop\n");
+            // Since it's a triangle mesh we already know faces will have a size of 3
+            for (auto i = 0u; i < 3u; i++)
+            {
+                const int vertexIdx = faces.getFaceVertex(faceIdx, i);
+                Vertex vertex = {vertices[3 * vertexIdx], vertices[3 * vertexIdx + 1], vertices[3 * vertexIdx + 2]};
+                fprintf(fp, "vertex %f %f %f\n", vertex[0], vertex[1], vertex[2]);
+            }
+            fprintf(fp, "endloop\n");
+            fprintf(fp, "endfacet\n");
         }
+        fprintf(fp,"endsolid");
+
+        fclose(fp);
+        success = true;
+    }
 
     }
 
