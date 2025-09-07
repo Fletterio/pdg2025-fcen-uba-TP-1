@@ -48,7 +48,6 @@ const char* SaverStl::_ext = "stl";
 
 //////////////////////////////////////////////////////////////////////
 bool SaverStl::save(const char* filename, SceneGraph& wrl) const {
-    bool success = false;
     if(filename!=(char*)0) {
 
     // Check these conditions
