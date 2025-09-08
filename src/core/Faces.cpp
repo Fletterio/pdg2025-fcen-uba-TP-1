@@ -36,7 +36,6 @@
 
 #include <math.h>
 #include "Faces.hpp"
-#include <algorithm>
 
 // Assuming there's at least one face in the vector and that it's valid (ends in -1)
 Faces::Faces(const int _nV, const vector<int>& _coordIndex)
