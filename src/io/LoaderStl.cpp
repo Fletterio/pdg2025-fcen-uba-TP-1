@@ -44,76 +44,130 @@
 #include "wrl/Material.hpp"
 #include "wrl/IndexedFaceSet.hpp"
 
+#include <array>
+
 // reference
 // https://en.wikipedia.org/wiki/STL_(file_format)
 
 const char* LoaderStl::_ext = "stl";
 
 bool LoaderStl::load(const char* filename, SceneGraph& wrl) {
-  bool success = false;
+    // clear the scene graph
+    wrl.clear();
+    wrl.setUrl("");
 
-  // clear the scene graph
-  wrl.clear();
-  wrl.setUrl("");
+    FILE* fp = (FILE*)0;
+    try {
 
-  FILE* fp = (FILE*)0;
-  try {
+        // open the file
+        if(filename==(char*)0) throw new StrException("filename==null");
+        fp = fopen(filename,"r");
+        if(fp==(FILE*)0) throw new StrException("fp==(FILE*)0");
 
-    // open the file
-    if(filename==(char*)0) throw new StrException("filename==null");
-    fp = fopen(filename,"r");
-    if(fp==(FILE*)0) throw new StrException("fp==(FILE*)0");
+        // use the io/Tokenizer class to parse the input ascii file
 
-    // use the io/Tokenizer class to parse the input ascii file
+        TokenizerFile tkn(fp);
+        // first token should be "solid"
+        if(tkn.expecting("solid") && tkn.get()) {
+            string stlName = tkn; // second token should be the solid name
 
-    TokenizerFile tkn(fp);
-    // first token should be "solid"
-    if(tkn.expecting("solid") && tkn.get()) {
-      string stlName = tkn; // second token should be the solid name
+            // create the scene graph structure :
+            // 1) the SceneGraph should have a single Shape node a child
+            Shape* shape = new Shape();
+            wrl.getChildren().push_back(shape);
+            // 2) the Shape node should have an Appearance node in its appearance field
+            // 3) the Appearance node should have a Material node in its material field
+            {
+              Appearance* appearance = new Appearance();
+              appearance->setMaterial(new Material());
+              shape->setAppearance(appearance);
+            }
+            // 4) the Shape node should have an IndexedFaceSet node in its geometry node
+            IndexedFaceSet* faceSet = new IndexedFaceSet();
+            shape->setGeometry(faceSet);
+            // from the IndexedFaceSet
+            // 5) get references to the coordIndex, coord, and normal arrays
+            auto& coordIndex = faceSet->getCoordIndex();
+            auto& coord = faceSet->getCoord();
+            auto& normal = faceSet->getNormal();
+            // 6) set the normalPerVertex variable to false (i.e., normals per face)
+            faceSet->setNormalPerVertex(false);
+            // the file should contain a list of triangles in the following format
 
-      // TODO ...
+            // facet normal ni nj nk
+            //   outer loop
+            //     vertex v1x v1y v1z
+            //     vertex v2x v2y v2z
+            //     vertex v3x v3y v3z
+            //   endloop
+            // endfacet
 
-      // create the scene graph structure :
-      // 1) the SceneGraph should have a single Shape node a child
-      // 2) the Shape node should have an Appearance node in its appearance field
-      // 3) the Appearance node should have a Material node in its material field
-      // 4) the Shape node should have an IndexedFaceSet node in its geometry node
+            // - run an infinite loop to parse all the faces
+            // - write a private method to parse each face within the loop
+            // - the method should return true if successful, and false if not
+            // - if your method returns tru
+            //     update the normal, coord, and coordIndex variables
+            // - if your method returns false
+            //     throw an StrException explaining why the method failed
 
-      // from the IndexedFaceSet
-      // 5) get references to the coordIndex, coord, and normal arrays
-      // 6) set the normalPerVertex variable to false (i.e., normals per face)  
+            int currentFace = 0u;
+            while(true)
+            {
+                using Normal = Vec3f;
+                using Vertex = Vec3f;
+                Normal currentNormal = {};
+                std::array<Vertex, 3> vertices = {};
+                // Check if endsolid
+                tkn.get();
+                if (tkn.equals("endsolid"))
+                    break;
+                // If not endsolid we should've just read a "facet" tag opener, push check below
+                // Read normal
+                if (!tkn.equals("facet") || !tkn.expecting("normal") || !tkn.getVec3f(currentNormal))
+                    throw(new StrException("Error parsing facet normal!"));
+                // Read vertices
+                auto readVertex = [&](unsigned int i) -> bool
+                {
+                    return tkn.expecting("vertex") && tkn.getVec3f(vertices[i]);
+                };
+                auto readVertices = [&]() -> bool
+                {
+                    bool retVal = tkn.expecting("outer") && tkn.expecting("loop");
+                    for (auto i = 0u; i < 3; i++) retVal = retVal && readVertex(i);
+                    return retVal && tkn.expecting("endloop");
+                };
+                if (!readVertices())
+                    throw(new StrException("Error parsing face vertices!"));
+                // Close the facet parsing
+                if (!tkn.expecting("endfacet"))
+                    throw(new StrException("Couldn't find a facet closing tag!"));
+                // Write normal
+                for (auto i = 0u; i < 3; i++)
+                    normal.push_back(currentNormal[i]);
+                // Write vertices
+                for (auto i = 0u; i < 3; i++)
+                    for (auto j = 0u; j < 3; j++)
+                        coord.push_back(vertices[i][j]);
+                // Write coordIndices
+                for (auto i = 0u; i < 3; i++)
+                    coordIndex.push_back(3 * currentFace + i);
+                currentFace++;
+                coordIndex.push_back(-1);
+            }
 
-      // the file should contain a list of triangles in the following format
+        }
 
-      // facet normal ni nj nk
-      //   outer loop
-      //     vertex v1x v1y v1z
-      //     vertex v2x v2y v2z
-      //     vertex v3x v3y v3z
-      //   endloop
-      // endfacet
-
-      // - run an infinite loop to parse all the faces
-      // - write a private method to parse each face within the loop
-      // - the method should return true if successful, and false if not
-      // - if your method returns tru
-      //     update the normal, coord, and coordIndex variables
-      // - if your method returns false
-      //     throw an StrException explaining why the method failed
-
+        // close the file (this statement may not be reached)
+        fclose(fp);
+    } catch(StrException* e) {
+        if(fp!=(FILE*)0) fclose(fp);
+        fprintf(stderr,"ERROR | %s\n",e->what());
+        delete e;
+        // clear the scene graph
+        wrl.clear();
+        return false;
     }
 
-    // close the file (this statement may not be reached)
-    fclose(fp);
-    
-  } catch(StrException* e) { 
-    
-    if(fp!=(FILE*)0) fclose(fp);
-    fprintf(stderr,"ERROR | %s\n",e->what());
-    delete e;
-
-  }
-
-  return success;
+    return true;
 }
 

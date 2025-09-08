@@ -50,76 +50,73 @@ const char* SaverStl::_ext = "stl";
 bool SaverStl::save(const char* filename, SceneGraph& wrl) const {
     if(filename!=(char*)0) {
 
-    // Check these conditions
-    bool canSave;
-    // 1) the SceneGraph should have a single child
-    canSave = wrl.getNumberOfChildren() == 1;
-    // 2) the child should be a Shape node
-    canSave = canSave && wrl[0]->isShape();
-    // 3) the geometry of the Shape node should be an IndexedFaceSet node
-    canSave = canSave && reinterpret_cast<Shape*>(wrl[0])->hasGeometryIndexedFaceSet();
-    if (!canSave)
-        return false;
-    IndexedFaceSet* faceSet = reinterpret_cast<IndexedFaceSet*>(reinterpret_cast<Shape*>(wrl[0])->getGeometry());
+        // Check these conditions
+        bool canSave;
+        // 1) the SceneGraph should have a single child
+        canSave = wrl.getNumberOfChildren() == 1;
+        // 2) the child should be a Shape node
+        canSave = canSave && wrl[0]->isShape();
+        // 3) the geometry of the Shape node should be an IndexedFaceSet node
+        canSave = canSave && reinterpret_cast<Shape*>(wrl[0])->hasGeometryIndexedFaceSet();
+        if (!canSave)
+            return false;
+        IndexedFaceSet* faceSet = reinterpret_cast<IndexedFaceSet*>(reinterpret_cast<Shape*>(wrl[0])->getGeometry());
 
-    // 4) the IndexedFaceSet should be a triangle mesh
-    canSave = faceSet->isTriangleMesh();
-    // 5) the IndexedFaceSet should have normals per face
-    const IndexedFaceSet::Binding bindingType = faceSet->getNormalBinding();
-    canSave &= bindingType == IndexedFaceSet::PB_PER_FACE_INDEXED || bindingType == IndexedFaceSet::PB_PER_FACE;
-    if (canSave) {
+        // 4) the IndexedFaceSet should be a triangle mesh
+        canSave = faceSet->isTriangleMesh();
+        // 5) the IndexedFaceSet should have normals per face
+        const IndexedFaceSet::Binding bindingType = faceSet->getNormalBinding();
+        canSave &= bindingType == IndexedFaceSet::PB_PER_FACE_INDEXED || bindingType == IndexedFaceSet::PB_PER_FACE;
+        if (canSave) {
 
-    FILE* fp = fopen(filename,"w");
-    if(	fp!=(FILE*)0) {
+            FILE* fp = fopen(filename,"w");
+            if(	fp!=(FILE*)0) {
 
-        // if set, use ifs->getName()
-        // otherwise use filename,
-        // but first remove directory and extension
+                // if set, use ifs->getName()
+                // otherwise use filename,
+                // but first remove directory and extension
 
-        using Normal = std::array<float, 3>;
-        using Vertex = std::array<float, 3>;
+                using Normal = std::array<float, 3>;
+                using Vertex = std::array<float, 3>;
 
-        const auto& normals = faceSet->getNormal();
-        auto getNormal = [&](const int faceIdx) -> Normal
-        {
-            unsigned int startingIdx;
-            if (bindingType == IndexedFaceSet::PB_PER_FACE_INDEXED)
-                startingIdx = faceSet->getNormalIndex()[faceIdx];
-            else
-                startingIdx = 3 * faceIdx;
+                const auto& normals = faceSet->getNormal();
+                auto getNormal = [&](const int faceIdx) -> Normal
+                {
+                    unsigned int startingIdx;
+                    if (bindingType == IndexedFaceSet::PB_PER_FACE_INDEXED)
+                        startingIdx = faceSet->getNormalIndex()[faceIdx];
+                    else
+                        startingIdx = 3 * faceIdx;
+                    return {normals[startingIdx], normals[startingIdx+ 1], normals[startingIdx + 2]};
+                };
 
-            return {normals[startingIdx], normals[startingIdx+ 1], normals[startingIdx + 2]};
-        };
+                // Create a Faces struct
+                const auto faces = Faces(0, faceSet->getCoordIndex());
+                const auto& vertices = faceSet->getCoord();
 
-        // Create a Faces struct
-        const auto faces = Faces(0, faceSet->getCoordIndex());
-        const auto& vertices = faceSet->getCoord();
+                fprintf(fp,"solid %s\n",filename);
+                const unsigned int numFaces = faces.getNumberOfFaces();
+                for (auto faceIdx = 0u; faceIdx < numFaces; faceIdx++)
+                {
+                    const Normal normal = getNormal(faceIdx);
+                    fprintf(fp, "facet normal %f %f %f\n", normal[0], normal[1], normal[2]);
+                    fprintf(fp, "outer loop\n");
+                    // Since it's a triangle mesh we already know faces will have a size of 3
+                    for (auto i = 0u; i < 3u; i++)
+                    {
+                        const int vertexIdx = faces.getFaceVertex(faceIdx, i);
+                        Vertex vertex = {vertices[3 * vertexIdx], vertices[3 * vertexIdx + 1], vertices[3 * vertexIdx + 2]};
+                        fprintf(fp, "vertex %f %f %f\n", vertex[0], vertex[1], vertex[2]);
+                    }
+                    fprintf(fp, "endloop\n");
+                    fprintf(fp, "endfacet\n");
+                }
+                fprintf(fp,"endsolid");
 
-        fprintf(fp,"solid %s\n",filename);
-        const unsigned int numFaces = faces.getNumberOfFaces();
-        for (auto faceIdx = 0u; faceIdx < numFaces; faceIdx++)
-        {
-            const Normal normal = getNormal(faceIdx);
-            fprintf(fp, "facet normal %f %f %f\n", normal[0], normal[1], normal[2]);
-            fprintf(fp, "outer loop\n");
-            // Since it's a triangle mesh we already know faces will have a size of 3
-            for (auto i = 0u; i < 3u; i++)
-            {
-                const int vertexIdx = faces.getFaceVertex(faceIdx, i);
-                Vertex vertex = {vertices[3 * vertexIdx], vertices[3 * vertexIdx + 1], vertices[3 * vertexIdx + 2]};
-                fprintf(fp, "vertex %f %f %f\n", vertex[0], vertex[1], vertex[2]);
+                fclose(fp);
             }
-            fprintf(fp, "endloop\n");
-            fprintf(fp, "endfacet\n");
+            return true;
         }
-        fprintf(fp,"endsolid");
-
-        fclose(fp);
-        success = true;
     }
-
-    }
-
-  }
-  return success;
+  return false;
 }
